@@ -3,6 +3,7 @@ package main
 import (
 	"Jsonb/benchmark"
 	"Jsonb/internal/db"
+	"flag"
 	"fmt"
 	"log"
 	"time"
@@ -34,6 +35,10 @@ func init() {
 }
 
 func main() {
+	// Parse command line flags
+	runs := flag.Int("runs", 100, "Number of benchmark runs to execute")
+	flag.Parse()
+
 	// // ✅ 1. CREATE: Insert single record
 	// record := data.DummyData{
 	// 	ID:   999, // Unique JSON ID
@@ -77,7 +82,12 @@ func main() {
 	// fmt.Println("🗑️ Deleted record(s) where age < 50")
 
 	// fmt.Println("🏁 Full CRUD test completed!")
+	
 	// Run benchmark tests
-	benchmark.RunBenchmark()
-	fmt.Println("🏁 Benchmark tests completed!")
+	fmt.Printf("🚀 Running benchmark %d time(s)...\n", *runs)
+	for i := 1; i <= *runs; i++ {
+		fmt.Printf("📊 Benchmark run %d/%d\n", i, *runs)
+		benchmark.RunBenchmark()
+	}
+	fmt.Printf("🏁 Completed %d benchmark run(s)!\n", *runs)
 }

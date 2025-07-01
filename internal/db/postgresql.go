@@ -37,12 +37,18 @@ func ConnectPostgres() error {
 		return err
 	}
 
-	sql := `CREATE INDEX IF NOT EXISTS idx_json_data_gin ON json_data USING GIN (data);`
-	if err := db.Exec(sql).Error; err != nil {
+	// Create optimized indexes
+	sql1 := `CREATE INDEX IF NOT EXISTS idx_json_data_id ON json_data ((data->>'id'), id);`
+	if err := db.Exec(sql1).Error; err != nil {
 		return err
 	}
+	fmt.Println("✅ Index on (data->>'id', id) created (or already exists)")
 
-	fmt.Println("✅ GIN index on JSONB 'data' created (or already exists)")
+	sql2 := `CREATE INDEX IF NOT EXISTS idx_json_data_age ON json_data (((data->>'age')::int));`
+	if err := db.Exec(sql2).Error; err != nil {
+		return err
+	}
+	fmt.Println("✅ Index on (data->>'age')::int created (or already exists)")
 
 	PostgresDB = db
 	fmt.Println("✅ Connected and AutoMigrated PostgreSQL")
@@ -63,14 +69,32 @@ func CreatePostgres(record data.DummyData) error {
 	return PostgresDB.Create(&item).Error
 }
 
-// Insert Multiple Records
-func InsertPostgres(records []data.DummyData) error {
-	for _, record := range records {
-		if err := CreatePostgres(record); err != nil {
-			return err
+// Bulk Insert Multiple Records (Optimized)
+func InsertPostgresBulk(records []data.DummyData) error {
+	if len(records) == 0 {
+		return nil
+	}
+
+	// Convert records to JSONData slice
+	jsonDataSlice := make([]JSONData, len(records))
+	for i, record := range records {
+		jsonBytes, err := json.Marshal(record)
+		if err != nil {
+			return fmt.Errorf("failed to marshal record at index %d: %v", i, err)
+		}
+		jsonDataSlice[i] = JSONData{
+			Data: datatypes.JSON(jsonBytes),
 		}
 	}
-	return nil
+
+	// Bulk insert with batch size for better performance
+	batchSize := 1000
+	return PostgresDB.CreateInBatches(jsonDataSlice, batchSize).Error
+}
+
+// Insert Multiple Records (kept for backward compatibility, but now uses bulk insert)
+func InsertPostgres(records []data.DummyData) error {
+	return InsertPostgresBulk(records)
 }
 
 // Find by JSON field (data.id)
@@ -78,7 +102,7 @@ func FindPostgresByID(jsonID int) (JSONData, error) {
 	var result JSONData
 	idStr := fmt.Sprintf("%d", jsonID) // Convert int to string because data->>'id' is text
 	err := PostgresDB.
-		Where("data->>'id' = ?", idStr). // No CAST — use string directly for index scan
+		Where("data->>'id' = ?", idStr). // Uses idx_json_data_id index
 		First(&result).Error
 	return result, err
 }
@@ -87,7 +111,7 @@ func FindPostgresByID(jsonID int) (JSONData, error) {
 func QueryPostgres(minAge int) ([]JSONData, error) {
 	var results []JSONData
 	err := PostgresDB.
-		Where("CAST(data->>'age' AS INTEGER) > ?", minAge).
+		Where("(data->>'age')::int > ?", minAge). // Uses idx_json_data_age index
 		Find(&results).Error
 	return results, err
 }

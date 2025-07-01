@@ -1,0 +1,47 @@
+# .gitpod.yml  
+tasks:  
+  - name: Setup and Run Benchmark  
+    init: |  
+      # Install dependencies  
+      go mod tidy  
+        
+    command: |  
+      # Start PostgreSQL (single line)  
+      docker run --name pg-json-test -e POSTGRES_USER=postgres -e POSTGRES_PASSWORD=pass -e POSTGRES_DB=testdb -p 5432:5432 -d postgres  
+        
+      # Start MongoDB (single line)  
+      docker run --name mongo-json-test -p 27017:27017 -d mongo  
+        
+      # Wait for services to be ready  
+      echo "⏳ Waiting for databases to start..."  
+      sleep 20  
+        
+      # Check if containers are running  
+      echo "📋 Container status:"  
+      docker ps  
+        
+      echo ""  
+      echo "✅ Databases ready! Starting benchmark..."  
+      echo ""  
+        
+      # Run the benchmark  
+      go run cmd/main.go  
+        
+      echo ""  
+      echo "🎉 Benchmark completed!"  
+      echo ""  
+      echo "🔍 For manual database access:"  
+      echo "  PostgreSQL: docker exec -it pg-json-test psql -U postgres -d testdb"  
+      echo "  MongoDB:    docker exec -it mongo-json-test mongosh"  
+      echo ""  
+      echo "🔄 To run benchmark again: go run cmd/main.go"  
+  
+ports:  
+  - port: 5432  
+    onOpen: ignore  
+  - port: 27017  
+    onOpen: ignore  
+  
+vscode:  
+  extensions:  
+    - golang.go  
